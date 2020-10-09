@@ -1,0 +1,16 @@
+{
+  "name": "tinkoff-invest-stats",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@tinkoff/invest-openapi-js-sdk": "^1.2.16",
+    "mqtt": "^4.2.1",
+    "tinkoff-portfolio": "^0.2.2"
+  }
+}
