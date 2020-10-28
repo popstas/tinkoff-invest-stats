@@ -18,35 +18,46 @@ function countPortfolioStats(items) {
     profit: 0,
     total: 0,
     percent: 0,
+    stocks: []
   };
   for (let item of items) {
-    const iStats = countItemPrice(item);
+    const iStats = countItemStats(item);
     stats.buy += iStats.buy;
     stats.profit += iStats.profit;
+
+    stats.stocks.push(iStats);
   }
 
   stats.total = stats.buy + stats.profit;
   stats.percent =
     stats.profit > 0
       ? Number((stats.total / stats.buy - 1) * 100).toFixed(2)
-      : Number((stats.total / stats.buy) * 100 * -1).toFixed(2);
+      : Number((1 - (stats.total / stats.buy)) * -100).toFixed(2);
   // stats.percent += '%';
 
   return stats;
 }
 
-function countItemPrice(item) {
-  let buy = item.averagePositionPrice.value * item.balance;
+function countItemStats(item) {
+  const stats = { name: item.name, ticker: item.ticker };
+
+  stats.buy = item.averagePositionPrice.value * item.balance;
   if (item.averagePositionPrice.currency === 'USD') {
-    buy = buy * usdRub;
+    stats.buy = stats.buy * usdRub;
   }
 
-  let profit = item.expectedYield.value;
+  stats.profit = item.expectedYield.value;
   if (item.expectedYield.currency === 'USD') {
-    profit = profit * usdRub;
+    stats.profit = stats.profit * usdRub;
   }
 
-  return {buy, profit};
+  stats.total = stats.buy + stats.profit;
+  stats.percent =
+    stats.profit > 0
+      ? Number((stats.total / stats.buy - 1) * 100).toFixed(2)
+      : Number((1 - (stats.total / stats.buy)) * -100).toFixed(2);
+
+  return stats;
 }
 
 async function getUsdRubCbr() {
@@ -81,6 +92,14 @@ async function getUsdRubCbr() {
       mqtt.publish(`${config.mqtt.topic}/${obj.name}/total`, `${parseInt(obj.total)}`);
       mqtt.publish(`${config.mqtt.topic}/${obj.name}/profit`, `${parseInt(obj.profit)}`);
       mqtt.publish(`${config.mqtt.topic}/${obj.name}/percent`, obj.percent);
+
+      for (let stock of obj.stocks) {
+        mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/buy`, `${parseInt(stock.buy)}`);
+        mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/total`, `${parseInt(stock.total)}`);
+        mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/profit`, `${parseInt(stock.profit)}`);
+        mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/percent`, stock.percent);
+      }
+
       data.push(obj);
     }
 

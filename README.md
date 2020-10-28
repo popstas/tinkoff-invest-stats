@@ -13,3 +13,10 @@
 - `tinkoff/iis/total`
 - `tinkoff/iis/profit`
 - `tinkoff/iis/percent`
+
+Курсы акций общие, падают в топики типа:
+
+- `tinkoff/stocks/YNDX/buy`
+- `tinkoff/stocks/YNDX/total`
+- `tinkoff/stocks/YNDX/profit`
+- `tinkoff/stocks/YNDX/percent`
