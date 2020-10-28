@@ -1,4 +1,6 @@
 const OpenAPI = require('@tinkoff/invest-openapi-js-sdk');
+const axios = require('axios');
+const fs = require('fs');
 const config = require('./config');
 const mqtt = require('./mqtt');
 
@@ -6,6 +8,9 @@ const apiURL = 'https://api-invest.tinkoff.ru/openapi';
 const socketURL = 'wss://api-invest.tinkoff.ru/openapi/md/v1/md-openapi/ws';
 const secretToken = config.tinkoff.secretToken;
 const api = new OpenAPI({ apiURL, secretToken, socketURL });
+
+const usdCacheFile = 'data/usd.json';
+let usdRub = 0;
 
 function countPortfolioStats(items) {
   const stats = {
@@ -15,8 +20,9 @@ function countPortfolioStats(items) {
     percent: 0,
   };
   for (let item of items) {
-    stats.buy += item.averagePositionPrice.value * item.balance;
-    stats.profit += item.expectedYield.value;
+    const iStats = countItemPrice(item);
+    stats.buy += iStats.buy;
+    stats.profit += iStats.profit;
   }
 
   stats.total = stats.buy + stats.profit;
@@ -29,17 +35,46 @@ function countPortfolioStats(items) {
   return stats;
 }
 
+function countItemPrice(item) {
+  let buy = item.averagePositionPrice.value * item.balance;
+  if (item.averagePositionPrice.currency === 'USD') {
+    buy = buy * usdRub;
+  }
+
+  let profit = item.expectedYield.value;
+  if (item.expectedYield.currency === 'USD') {
+    profit = profit * usdRub;
+  }
+
+  return {buy, profit};
+}
+
+async function getUsdRubCbr() {
+  let cache = fs.existsSync(usdCacheFile) ? JSON.parse(fs.readFileSync(usdCacheFile)) : {};
+  if(Date.now() - cache.time > 3600 * 1000) cache = {};
+  if(cache.usd) return cache.usd;
+
+  const res = await axios.get('https://www.cbr-xml-daily.ru/daily_json.js');
+  cache.usd = res.data.Valute.USD.Value;
+  cache.time = Date.now();
+  fs.writeFileSync(usdCacheFile, JSON.stringify(cache));
+  return cache.usd;
+}
+
 !(async function run() {
   try {
     const data = [];
 
+    usdRub = await getUsdRubCbr();
+    if (!usdRub) throw Error('Cannot get cbr usd');
+
     // const { figi } = await api.searchOne({ ticker: 'AAPL' });
-    const res = await api.accounts();
+    const accounts = await api.accounts();
 
-    for (let acc of res.accounts) {
-      const res = await api.makeRequest('/portfolio?brokerAccountId=' + acc.brokerAccountId);
+    for (let acc of accounts.accounts) {
+      const portfolio = await api.makeRequest('/portfolio?brokerAccountId=' + acc.brokerAccountId);
 
-      const obj = countPortfolioStats(res.positions);
+      const obj = countPortfolioStats(portfolio.positions);
       obj.name = acc.brokerAccountType == 'Tinkoff' ? 'brk' : 'iis';
 
       mqtt.publish(`${config.mqtt.topic}/${obj.name}/buy`, `${parseInt(obj.buy)}`);
