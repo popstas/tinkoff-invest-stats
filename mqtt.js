@@ -6,7 +6,7 @@ function mqttInit() {
   // console.log('Connecting to MQTT...');
   const client = mqtt.connect(`mqtt://${config.mqtt.host}`, {
     port: config.mqtt.port,
-    username: config.mqtt.user,
+    username: config.mqtt.username,
     password: config.mqtt.password,
   });
 
