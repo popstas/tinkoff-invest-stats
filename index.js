@@ -88,16 +88,18 @@ async function getUsdRubCbr() {
       const obj = countPortfolioStats(portfolio.positions);
       obj.name = acc.brokerAccountType == 'Tinkoff' ? 'brk' : 'iis';
 
-      mqtt.publish(`${config.mqtt.topic}/${obj.name}/buy`, `${parseInt(obj.buy)}`);
-      mqtt.publish(`${config.mqtt.topic}/${obj.name}/total`, `${parseInt(obj.total)}`);
-      mqtt.publish(`${config.mqtt.topic}/${obj.name}/profit`, `${parseInt(obj.profit)}`);
-      mqtt.publish(`${config.mqtt.topic}/${obj.name}/percent`, obj.percent);
-
-      for (let stock of obj.stocks) {
-        mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/buy`, `${parseInt(stock.buy)}`);
-        mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/total`, `${parseInt(stock.total)}`);
-        mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/profit`, `${parseInt(stock.profit)}`);
-        mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/percent`, stock.percent);
+      if (config.mqtt && config.mqtt.enabled) {
+        mqtt.publish(`${config.mqtt.topic}/${obj.name}/buy`, `${parseInt(obj.buy)}`);
+        mqtt.publish(`${config.mqtt.topic}/${obj.name}/total`, `${parseInt(obj.total)}`);
+        mqtt.publish(`${config.mqtt.topic}/${obj.name}/profit`, `${parseInt(obj.profit)}`);
+        mqtt.publish(`${config.mqtt.topic}/${obj.name}/percent`, obj.percent);
+  
+        for (let stock of obj.stocks) {
+          mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/buy`, `${parseInt(stock.buy)}`);
+          mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/total`, `${parseInt(stock.total)}`);
+          mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/profit`, `${parseInt(stock.profit)}`);
+          mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/percent`, stock.percent);
+        }
       }
 
       data.push(obj);

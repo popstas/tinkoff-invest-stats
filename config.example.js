@@ -1,5 +1,6 @@
 module.exports = {
   mqtt: {
+    enabled: true,
     host: '',
     port: 1883,
     user: '',
