@@ -1,5 +1,5 @@
 const Influx = require('influx');
-const config = require('./config');
+const config = require('../config');
 
 function influxdbInit() {
   if (!config.influxdb || !config.influxdb.enabled) return false;

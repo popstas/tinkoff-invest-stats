@@ -1,7 +1,7 @@
 const OpenAPI = require('@tinkoff/invest-openapi-js-sdk');
 const axios = require('axios');
 const fs = require('fs');
-const config = require('./config');
+const config = require('../config');
 const mqtt = require('./mqtt');
 const influxdb = require('./influxdb');
 
