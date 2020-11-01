@@ -73,84 +73,86 @@ async function getUsdRubCbr() {
   return cache.usd;
 }
 
-!(async function run() {
-  try {
-    const data = [];
+async function run() {
+  const data = [];
 
-    usdRub = await getUsdRubCbr();
-    if (!usdRub) throw Error('Cannot get cbr usd');
+  usdRub = await getUsdRubCbr();
+  if (!usdRub) throw Error('Cannot get cbr usd');
 
-    // const { figi } = await api.searchOne({ ticker: 'AAPL' });
-    const accounts = await api.accounts();
+  // const { figi } = await api.searchOne({ ticker: 'AAPL' });
+  const accounts = await api.accounts();
 
-    for (let acc of accounts.accounts) {
-      const portfolio = await api.makeRequest('/portfolio?brokerAccountId=' + acc.brokerAccountId);
+  for (let acc of accounts.accounts) {
+    const portfolio = await api.makeRequest('/portfolio?brokerAccountId=' + acc.brokerAccountId);
 
-      const obj = countPortfolioStats(portfolio.positions);
-      obj.name = acc.brokerAccountType == 'Tinkoff' ? 'brk' : 'iis';
+    const obj = countPortfolioStats(portfolio.positions);
+    obj.name = acc.brokerAccountType == 'Tinkoff' ? 'brk' : 'iis';
 
-      if (mqtt) {
-        mqtt.publish(`${config.mqtt.topic}/${obj.name}/buy`, `${parseInt(obj.buy)}`);
-        mqtt.publish(`${config.mqtt.topic}/${obj.name}/total`, `${parseInt(obj.total)}`);
-        mqtt.publish(`${config.mqtt.topic}/${obj.name}/profit`, `${parseInt(obj.profit)}`);
-        mqtt.publish(`${config.mqtt.topic}/${obj.name}/percent`, Number(obj.percent).toFixed(2));
+    if (mqtt) {
+      mqtt.publish(`${config.mqtt.topic}/${obj.name}/buy`, `${parseInt(obj.buy)}`);
+      mqtt.publish(`${config.mqtt.topic}/${obj.name}/total`, `${parseInt(obj.total)}`);
+      mqtt.publish(`${config.mqtt.topic}/${obj.name}/profit`, `${parseInt(obj.profit)}`);
+      mqtt.publish(`${config.mqtt.topic}/${obj.name}/percent`, Number(obj.percent).toFixed(2));
 
-        for (let stock of obj.stocks) {
-          mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/buy`, `${parseInt(stock.buy)}`);
-          mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/total`, `${parseInt(stock.total)}`);
-          mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/profit`, `${parseInt(stock.profit)}`);
-          mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/percent`, Number(stock.percent).toFixed(2));
-        }
+      for (let stock of obj.stocks) {
+        mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/buy`, `${parseInt(stock.buy)}`);
+        mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/total`, `${parseInt(stock.total)}`);
+        mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/profit`, `${parseInt(stock.profit)}`);
+        mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/percent`, Number(stock.percent).toFixed(2));
       }
+    }
 
-      if (influxdb) {
-        const points = [];
+    if (influxdb) {
+      const points = [];
 
-        const data = {
+      const data = {
+        measurement: config.influxdb.measurement,
+        tags: {
+          host: config.influxdb.defaultTags.host,
+          type: 'total',
+          ticker: obj.name,
+        },
+        fields: {
+          name: acc.brokerAccountType,
+          buy: obj.buy,
+          total: obj.total,
+          profit: obj.profit,
+          percent: obj.percent,
+        },
+      };
+      points.push(data);
+
+      for (let stock of obj.stocks) {
+        points.push({
           measurement: config.influxdb.measurement,
           tags: {
             host: config.influxdb.defaultTags.host,
-            type: 'total',
-            ticker: obj.name,
+            type: 'stock',
+            ticker: stock.ticker,
           },
           fields: {
-            name: acc.brokerAccountType,
-            buy: obj.buy,
-            total: obj.total,
-            profit: obj.profit,
-            percent: obj.percent,
-          },
-        };
-        points.push(data);
-
-        for (let stock of obj.stocks) {
-          points.push({
-            measurement: config.influxdb.measurement,
-            tags: {
-              host: config.influxdb.defaultTags.host,
-              type: 'stock',
-              ticker: stock.ticker,
-            },
-            fields: {
-              name: stock.name,
-              buy: stock.buy,
-              total: stock.total,
-              profit: stock.profit,
-              percent: stock.percent,
-            }
-          });
-        }
-
-        influxdb.writePoints(points);
+            name: stock.name,
+            buy: stock.buy,
+            total: stock.total,
+            profit: stock.profit,
+            percent: stock.percent,
+          }
+        });
       }
 
-      data.push(obj);
+      influxdb.writePoints(points);
     }
 
-    console.log(JSON.stringify(data));
-  } catch (e) {
-    console.error(e);
+    data.push(obj);
   }
 
+  console.log(JSON.stringify(data));
+
   setTimeout(() => process.exit(0), 10000);
-})();
+};
+
+try {
+  run();
+} catch (e) {
+  console.error(e);
+}
