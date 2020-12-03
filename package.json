@@ -4,7 +4,8 @@
   "description": "Отправка данных о портфелях в MQTT",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "stocks": "node src/getStocks.js"
   },
   "author": "",
   "license": "ISC",

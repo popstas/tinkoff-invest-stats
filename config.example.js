@@ -22,4 +22,9 @@ module.exports = {
   tinkoff: {
     secretToken: '',
   },
+  tickers: [
+    'FXGD',
+    'YNDX',
+    'SBERP',
+  ]
 };
