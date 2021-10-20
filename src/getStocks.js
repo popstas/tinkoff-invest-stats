@@ -19,7 +19,7 @@ async function getFigiByTickers(tickers) {
     const res = await api.search({ticker});
 
     if (res.instruments.length === 0) {
-      console.error('FIGI by ticker not found: ' + ticker);
+      console.error('figi by ticker not found: ' + ticker);
       continue;
     }
 

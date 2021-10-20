@@ -12,6 +12,7 @@ const api = new OpenAPI({ apiURL, secretToken, socketURL });
 
 const usdCacheFile = 'data/usd.json';
 let usdRub = 0;
+let eurRub = 0;
 
 function countPortfolioStats(items) {
   const stats = {
@@ -46,10 +47,16 @@ function countItemStats(item) {
   if (item.averagePositionPrice.currency === 'USD') {
     stats.buy = stats.buy * usdRub;
   }
+  if (item.averagePositionPrice.currency === 'EUR') {
+    stats.buy = stats.buy * eurRub;
+  }
 
   stats.profit = item.expectedYield.value;
   if (item.expectedYield.currency === 'USD') {
     stats.profit = stats.profit * usdRub;
+  }
+  if (item.expectedYield.currency === 'EUR') {
+    stats.profit = stats.profit * eurRub;
   }
 
   stats.total = stats.buy + stats.profit;
@@ -61,23 +68,27 @@ function countItemStats(item) {
   return stats;
 }
 
-async function getUsdRubCbr() {
+async function getCurrenciesCbr() {
   let cache = fs.existsSync(usdCacheFile) ? JSON.parse(fs.readFileSync(usdCacheFile)) : {};
   if(Date.now() - cache.time > 3600 * 1000) cache = {};
-  if(cache.usd) return cache.usd;
+  if(cache.usd) return cache;
 
   const res = await axios.get('https://www.cbr-xml-daily.ru/daily_json.js');
   cache.usd = res.data.Valute.USD.Value;
+  cache.eur = res.data.Valute.EUR.Value;
   cache.time = Date.now();
   fs.writeFileSync(usdCacheFile, JSON.stringify(cache));
-  return cache.usd;
+  return cache;
 }
 
 async function run() {
   const data = [];
 
-  usdRub = await getUsdRubCbr();
+  const curr = await getCurrenciesCbr();
+  usdRub = curr.usd;
+  eurRub = curr.eur;
   if (!usdRub) throw Error('Cannot get cbr usd');
+  if (!eurRub) throw Error('Cannot get cbr eur');
 
   // const { figi } = await api.searchOne({ ticker: 'AAPL' });
   const accounts = await api.accounts();
@@ -94,12 +105,16 @@ async function run() {
       mqtt.publish(`${config.mqtt.topic}/${obj.name}/profit`, `${parseInt(obj.profit)}`);
       mqtt.publish(`${config.mqtt.topic}/${obj.name}/percent`, Number(obj.percent).toFixed(2));
 
+      // let count = 0;
+
       for (let stock of obj.stocks) {
         mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/buy`, `${parseInt(stock.buy)}`);
         mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/total`, `${parseInt(stock.total)}`);
         mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/profit`, `${parseInt(stock.profit)}`);
         mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/percent`, Number(stock.percent).toFixed(2));
       }
+
+      // console.log(`${count} / ${obj.stocks.length}`);
     }
 
     if (influxdb) {
