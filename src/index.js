@@ -92,6 +92,8 @@ async function run() {
 
   // const { figi } = await api.searchOne({ ticker: 'AAPL' });
   const accounts = await api.accounts();
+  const points = [];
+  const stocksMap = {};
 
   for (let acc of accounts.accounts) {
     const portfolio = await api.makeRequest('/portfolio?brokerAccountId=' + acc.brokerAccountId);
@@ -118,8 +120,6 @@ async function run() {
     }
 
     if (influxdb) {
-      const points = [];
-
       const data = {
         measurement: config.influxdb.measurement,
         tags: {
@@ -138,7 +138,7 @@ async function run() {
       points.push(data);
 
       for (let stock of obj.stocks) {
-        points.push({
+        const point = {
           measurement: config.influxdb.measurement,
           tags: {
             host: config.influxdb.defaultTags.host,
@@ -152,13 +152,36 @@ async function run() {
             profit: stock.profit,
             percent: stock.percent,
           }
-        });
-      }
+        };
 
-      influxdb.writePoints(points);
+        // суммируем бумаги на разных счетах, если они есть
+        const exists = stocksMap[stock.ticker];
+        if (exists) {
+          point.fields = {
+            name: stock.name,
+            buy: stock.buy + exists.fields.buy,
+            total: stock.total + exists.fields.total,
+            profit: stock.profit + exists.fields.profit,
+          }
+
+          point.fields.percent =
+          point.fields.profit > 0
+            ? (point.fields.total / point.fields.buy - 1) * 100
+            : (1 - (point.fields.total / point.fields.buy)) * -100;
+        }
+        stocksMap[stock.ticker] = point; // не кладём сразу в points, чтобы просуммировать
+      }
     }
 
     data.push(obj);
+  }
+
+  if (influxdb) {
+    for (let ticker in stocksMap) {
+      const point = stocksMap[ticker];
+      points.push(point);
+    }
+    influxdb.writePoints(points);
   }
 
   console.log(JSON.stringify(data));
