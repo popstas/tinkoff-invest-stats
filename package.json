@@ -5,7 +5,9 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "stocks": "node src/getStocks.js"
+    "stocks": "node src/getStocks.js",
+    "addStock": "node src/addStock.js",
+    "removeStock": "node src/removeStock.js"
   },
   "author": "",
   "license": "ISC",
