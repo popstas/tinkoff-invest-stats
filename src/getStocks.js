@@ -1,16 +1,19 @@
-const OpenAPI = require('@tinkoff/invest-openapi-js-sdk');
+// const OpenAPI = require('@tinkoff/invest-openapi-js-sdk');
+const { TinkoffInvestApi, Helpers } = require('tinkoff-invest-api');
 const fs = require('fs');
 const config = require('../config');
 const mqtt = require('./mqtt');
 const influxdb = require('./influxdb');
 
-const apiURL = 'https://api-invest.tinkoff.ru/openapi';
-const socketURL = 'wss://api-invest.tinkoff.ru/openapi/md/v1/md-openapi/ws';
-const secretToken = config.tinkoff.secretToken;
-const api = new OpenAPI({ apiURL, secretToken, socketURL });
+// const apiURL = 'https://api-invest.tinkoff.ru/openapi';
+// const socketURL = 'wss://api-invest.tinkoff.ru/openapi/md/v1/md-openapi/ws';
+// const secretToken = config.tinkoff.secretToken;
+// const api = new OpenAPI({ apiURL, secretToken, socketURL });
+const api = new TinkoffInvestApi({ token: config.tinkoff.secretToken });
 
 const stocksCacheFile = 'data/stocks.json';
 
+// TODO: в новом api ticker без class_code не работает, а этих кодов минимум 3: МСК, СПБ, валюта
 async function getFigiByTickers(tickers) {
   let cache = fs.existsSync(stocksCacheFile) ? JSON.parse(fs.readFileSync(stocksCacheFile)) : {};
 

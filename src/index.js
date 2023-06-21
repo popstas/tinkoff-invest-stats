@@ -1,18 +1,24 @@
-const OpenAPI = require('@tinkoff/invest-openapi-js-sdk');
+const { TinkoffInvestApi, Helpers } = require('tinkoff-invest-api');
 const axios = require('axios');
 const fs = require('fs');
 const config = require('../config');
 const mqtt = require('./mqtt');
 const influxdb = require('./influxdb');
 
-const apiURL = 'https://api-invest.tinkoff.ru/openapi';
-const socketURL = 'wss://api-invest.tinkoff.ru/openapi/md/v1/md-openapi/ws';
-const secretToken = config.tinkoff.secretToken;
-const api = new OpenAPI({ apiURL, secretToken, socketURL });
+// const apiURL = 'https://api-invest.tinkoff.ru/openapi';
+// const socketURL = 'wss://api-invest.tinkoff.ru/openapi/md/v1/md-openapi/ws';
+// const secretToken = config.tinkoff.secretToken;
+// const api = new OpenAPI({ apiURL, secretToken, socketURL });
+const api = new TinkoffInvestApi({ token: config.tinkoff.secretToken });
 
 const usdCacheFile = 'data/usd.json';
 let usdRub = 0;
 let eurRub = 0;
+
+const accountTypeNames = {
+  1: 'brk',
+  2: 'iis',
+};
 
 function countPortfolioStats(items) {
   const stats = {
@@ -43,24 +49,27 @@ function countPortfolioStats(items) {
 function countItemStats(item) {
   const stats = { name: item.name, ticker: item.ticker };
 
-  stats.buy = item.averagePositionPrice.value * item.balance;
-  if (item.averagePositionPrice.currency === 'USD') {
+  stats.buy = Helpers.toNumber(item.averagePositionPrice) * item.quantity.units;
+  // stats.buy = item.averagePositionPrice.value * item.balance;
+  if (item.averagePositionPrice.currency === 'usd') {
     stats.buy = stats.buy * usdRub;
   }
-  if (item.averagePositionPrice.currency === 'EUR') {
+  if (item.averagePositionPrice.currency === 'eur') {
     stats.buy = stats.buy * eurRub;
   }
 
-  stats.profit = item.expectedYield.value;
-  if (item.expectedYield.currency === 'USD') {
+  stats.profit = Helpers.toNumber(item.expectedYield);
+  if (item.averagePositionPrice.currency === 'usd') {
     stats.profit = stats.profit * usdRub;
   }
-  if (item.expectedYield.currency === 'EUR') {
+  if (item.averagePositionPrice.currency === 'eur') {
     stats.profit = stats.profit * eurRub;
   }
 
   stats.total = stats.buy + stats.profit;
-  stats.percent =
+
+  if (!stats.profit) stats.percent = 0;
+  else stats.percent =
     stats.profit > 0
       ? (stats.total / stats.buy - 1) * 100
       : (1 - (stats.total / stats.buy)) * -100;
@@ -91,15 +100,33 @@ async function run() {
   if (!eurRub) throw Error('Cannot get cbr eur');
 
   // const { figi } = await api.searchOne({ ticker: 'AAPL' });
-  const accounts = await api.accounts();
+  // const accounts = await api.accounts();
+  const { accounts } = await api.users.getAccounts({});
   const points = [];
   const stocksMap = {};
 
-  for (let acc of accounts.accounts) {
-    const portfolio = await api.makeRequest('/portfolio?brokerAccountId=' + acc.brokerAccountId);
+  for (let acc of accounts) {
+    // const portfolio = await api.makeRequest('/portfolio?brokerAccountId=' + acc.brokerAccountId);
+    const portfolio = await api.operations.getPortfolio({ accountId: acc.id });
+    const positions = [];
+    const instruments = []; // not used
+    for (let item of portfolio.positions) {
+      const { instrument } = await api.instruments.getInstrumentBy({
+        idType: 1, // figi, 2 - ticker
+        classCode: '', // 'SPBXM', 'SPBXM_OTC', 'TQBR', 'CETS', 'TQTF', 'TQCB', 'SPBDE'
+        id: item.figi,
+      });
+      instruments.push(instrument);
+      item.ticker = instrument.ticker;
+      item.name = instrument.name;
+      item.class_code = instrument.class_code;
+      positions.push(item);
+    }
 
-    const obj = countPortfolioStats(portfolio.positions);
-    obj.name = acc.brokerAccountType == 'Tinkoff' ? 'brk' : 'iis';
+    // console.log('positions: ', positions);
+
+    const obj = countPortfolioStats(positions);
+    obj.name = accountTypeNames[acc.type] || 'unknown';
 
     if (mqtt) {
       mqtt.publish(`${config.mqtt.topic}/${obj.name}/buy`, `${parseInt(obj.buy)}`);
@@ -110,16 +137,22 @@ async function run() {
       // let count = 0;
 
       for (let stock of obj.stocks) {
-        mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/buy`, `${parseInt(stock.buy)}`);
-        mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/total`, `${parseInt(stock.total)}`);
-        mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/profit`, `${parseInt(stock.profit)}`);
-        mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/percent`, Number(stock.percent).toFixed(2));
+        try {
+          mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/buy`, `${parseInt(stock.buy)}`);
+          mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/total`, `${parseInt(stock.total)}`);
+          mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/profit`, `${parseInt(stock.profit)}`);
+          mqtt.publish(`${config.mqtt.topic}/stocks/${stock.ticker}/percent`, Number(stock.percent).toFixed(2));
+        }
+        catch (e) {
+          console.log('e: ', e);
+        }
       }
 
       // console.log(`${count} / ${obj.stocks.length}`);
     }
 
     if (influxdb) {
+      // total field
       const data = {
         measurement: config.influxdb.measurement,
         tags: {
@@ -128,7 +161,7 @@ async function run() {
           ticker: obj.name,
         },
         fields: {
-          name: acc.brokerAccountType,
+          name: accountTypeNames[acc.type] || 'unknown',
           buy: obj.buy,
           total: obj.total,
           profit: obj.profit,
@@ -137,6 +170,7 @@ async function run() {
       };
       points.push(data);
 
+      // by ticker fields
       for (let stock of obj.stocks) {
         const point = {
           measurement: config.influxdb.measurement,
